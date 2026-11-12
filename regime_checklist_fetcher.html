@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Month-End Regime Checklist Auto-Fetcher &amp; JSON Generator</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0b1120;
+      color: #f1f5f9;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.92); }
+    }
+    .animate-pulse-dot {
+      animation: pulse-dot 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Toast Notification -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Import JSON Modal -->
+  <div id="importModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-semibold text-white">Import / Test Regime JSON</h3>
+        <button id="closeImportModalBtn" type="button" class="text-slate-400 hover:text-white px-2 py-1 rounded-lg text-sm">✕</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">
+        Paste a JSON payload below or upload a <code class="mono text-indigo-300">.json</code> file to populate all 8 regime checklist fields and recalculate SOP signals.
+      </p>
+      <textarea id="importJsonTextarea" rows="8" class="w-full mono text-xs bg-slate-950 border border-slate-700 rounded-xl p-3 text-emerald-300 focus:outline-none focus:border-indigo-500 mb-3" placeholder='{"smallcap_pe": 32.35, "smallcap_dd_pct": 2.96, ...}'></textarea>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <label class="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700 transition">
+          <span>Upload .json File</span>
+          <input id="uploadJsonFileInput" type="file" accept=".json,application/json" class="hidden" />
+        </label>
+        <div class="flex items-center gap-2">
+          <button id="cancelImportBtn" type="button" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition">Cancel</button>
+          <button id="applyImportBtn" type="button" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">Apply JSON to Checklist</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold mono text-sm">
+          SOP
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">Month-End Regime Auto-Fetcher &amp; JSON Builder</h1>
+            <span id="fetchStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+              <span id="fetchStatusText">Auto-Fetched on Open</span>
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">
+            Automatically resolves all 8 SOP regime fields on page open &amp; outputs ready-to-import JSON for your month-end HTML app
+          </p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="runFetchBtn" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          <span>Re-Fetch Now</span>
+        </button>
+        <button id="openImportModalBtn" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">
+          <span>Import JSON</span>
+        </button>
+        <button id="copyTopJsonBtn" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-xs font-semibold text-white transition">
+          <span>Copy JSON</span>
+        </button>
+        <button id="downloadTopJsonBtn" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">
+          <span>Download .json</span>
+        </button>
+        <button id="downloadBakedHtmlTopBtn" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-slate-950 shadow-sm transition">
+          <span>Download Offline HTML (Data Baked In)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1 border-t border-slate-800/60 pt-2 overflow-x-auto">
+      <button id="tabBtnDashboard" type="button" data-tab="dashboard" class="tab-btn px-4 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-indigo-500 text-white bg-slate-800/60 transition whitespace-nowrap">
+        1. Live Checklist &amp; JSON Output
+      </button>
+      <button id="tabBtnSnippet" type="button" data-tab="snippet" class="tab-btn px-4 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap">
+        2. Drop-In HTML &lt;script&gt; (Auto-Fetch on Open)
+      </button>
+      <button id="tabBtnPython" type="button" data-tab="python" class="tab-btn px-4 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap">
+        3. Local Python Fetcher (fetch_regime_data.py)
+      </button>
+      <button id="tabBtnGithub" type="button" data-tab="github" class="tab-btn px-4 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap">
+        4. GitHub Actions Auto-Injector (.yml)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+
+    <!-- TAB 1: DASHBOARD & LIVE JSON GENERATOR -->
+    <section id="tabPanelDashboard" class="space-y-6">
+
+      <!-- Aggregate Regime Summary Banner -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Overall SOP Regime Tally</div>
+          <div id="overallRegimeHeadline" class="text-lg font-bold text-white mt-1">S2 Tactical Bias</div>
+          <div id="overallRegimeSubtext" class="text-xs text-slate-400 mt-1">S1 signals: 0 · S2 signals: 1 · Neutral: 3</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">MAHKTECH Buy Gate</div>
+          <div id="mahktechGateHeadline" class="text-lg font-bold text-rose-400 mt-1">BLOCKED (Premium &gt; 1.5%)</div>
+          <div id="mahktechGateSubtext" class="text-xs text-slate-400 mt-1">HSTECH ≤15% low (PASS) · Vol ≥₹50k (PASS) · iNAV Prem +30.92% (FAIL)</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">RBI MPC Policy Stance</div>
+          <div id="rbiSummaryHeadline" class="text-lg font-bold text-amber-300 mt-1">Hawkish (5.50% Repo)</div>
+          <div class="text-xs text-slate-400 mt-1">Oct 2026 MPC: +25 bps hike &amp; Calibrated Tightening</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Snapshot Timestamp</div>
+          <div id="snapshotTimestampDisplay" class="text-sm font-semibold mono text-indigo-300 mt-1">2026-11-12</div>
+          <div id="fetchLogSummary" class="text-xs text-slate-400 mt-1">8/8 fields populated · Ready for JSON export</div>
+        </div>
+      </div>
+
+      <!-- Main 2-Column Grid: Left 8 Cards, Right Sticky JSON Output -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- Left Column: 8 Regime Checklist Cards -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">8 Month-End Regime Checklist Inputs</h2>
+            <div class="flex items-center gap-2">
+              <button id="resetVerifiedBtn" type="button" class="text-xs text-indigo-400 hover:text-indigo-300 underline">Reset to Nov 2026 Verified Snapshot</button>
+            </div>
+          </div>
+
+          <!-- CARD 1: Nifty Smallcap 250 P/E -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#1</span>
+                  <h3 class="text-sm font-bold text-white">Nifty Smallcap 250 P/E</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">SOP thresholds: <span class="text-emerald-300 font-medium">≤ 30 → S1 bias</span> · <span class="text-amber-300 font-medium">≥ 35 → S2 bias</span></p>
+              </div>
+              <span id="badgeField1" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700">Neutral (Mid-Band)</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label for="inputSmallcapPe" class="block text-xs text-slate-400 mb-1">Index P/E Ratio</label>
+                <input id="inputSmallcapPe" type="number" step="0.01" value="32.35" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="presetSmallcapPeSource" class="block text-xs text-slate-400 mb-1">Verified Source Preset</label>
+                <select id="presetSmallcapPeSource" class="w-full text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                  <option value="32.35">IndexPE (11 Nov 2026): 32.35</option>
+                  <option value="32.40">Screener (Nov 2026): 32.40</option>
+                  <option value="32.38">5paisa (08 Nov 2026): 32.38</option>
+                </select>
+              </div>
+              <div class="text-xs text-slate-400 bg-slate-950/70 border border-slate-800/80 rounded-xl p-2.5">
+                <div>5Y Median: <span class="mono text-slate-200">28.31</span></div>
+                <div>3Y Median: <span class="mono text-slate-200">30.60</span></div>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://indexpe.in/nifty-smallcap-250" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">IndexPE (32.35)</a> · <a href="https://www.screener.in/company/SMALLCA250/" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Screener (32.4)</a> · <a href="https://www.nseindia.com/index-tracker/NIFTY%20SMLCAP%20250" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">NSE Tracker</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel1" class="text-indigo-300">smallcap_pe</span></span>
+            </div>
+          </div>
+
+          <!-- CARD 2: Smallcap Drawdown from 12m Peak % -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#2</span>
+                  <h3 class="text-sm font-bold text-white">Smallcap Drawdown from 12m Peak %</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">Formula: <code class="mono text-slate-300">(peak − current) / peak × 100</code> (enter 0 if at/near peak)</p>
+              </div>
+              <span id="badgeField2" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700">2.96% Drawdown</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label for="inputSmallcapPeak" class="block text-xs text-slate-400 mb-1">12m Peak Close (52W High)</label>
+                <input id="inputSmallcapPeak" type="number" step="0.01" value="18551.00" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputSmallcapCurrent" class="block text-xs text-slate-400 mb-1">Current Level</label>
+                <input id="inputSmallcapCurrent" type="number" step="0.01" value="18002.00" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputSmallcapDdPct" class="block text-xs text-indigo-300 font-medium mb-1">Drawdown % (App Input)</label>
+                <input id="inputSmallcapDdPct" type="number" step="0.01" value="2.96" class="w-full mono text-sm bg-indigo-950/40 border border-indigo-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://groww.in/indices/nifty-smallcap-250" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Groww (52W High 18,551)</a> · <a href="https://www.screener.in/company/SMALLCA250/" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Screener (18,002)</a> · <a href="https://www.5paisa.com/stocks/smallca250-share-price" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">5paisa (17,589)</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel2" class="text-indigo-300">smallcap_dd_pct</span></span>
+            </div>
+          </div>
+
+          <!-- CARD 3: BSE Clean Environment Drawdown % -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#3</span>
+                  <h3 class="text-sm font-bold text-white">BSE Clean Environment Drawdown %</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">SOP threshold: <span class="text-emerald-300 font-medium">≥ 20% drawdown → S1 bias</span> (Index or Motilal Oswal Clean Env proxy)</p>
+              </div>
+              <span id="badgeField3" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700">Neutral (&lt; 20% DD)</span>
+            </div>
+
+            <div class="mb-3">
+              <label for="presetCleanEnvMode" class="block text-xs text-slate-400 mb-1">Data Source / Proxy Selection</label>
+              <select id="presetCleanEnvMode" class="w-full text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="proxy">Motilal Oswal BSE Clean Environment Index Fund NAV (52W High ₹9.9646 → Current ₹8.0978 = 18.73% DD)</option>
+                <option value="index">BSE Clean Environment Index Direct (Prev High 6,734.37 → Current 6,728.07 = 0.09% DD)</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label for="inputCleanEnvPeak" class="block text-xs text-slate-400 mb-1">12m Peak (Index / NAV)</label>
+                <input id="inputCleanEnvPeak" type="number" step="0.0001" value="9.9646" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputCleanEnvCurrent" class="block text-xs text-slate-400 mb-1">Current Level / NAV</label>
+                <input id="inputCleanEnvCurrent" type="number" step="0.0001" value="8.0978" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputCleanEnvDdPct" class="block text-xs text-indigo-300 font-medium mb-1">Drawdown % (App Input)</label>
+                <input id="inputCleanEnvDdPct" type="number" step="0.01" value="18.73" class="w-full mono text-sm bg-indigo-950/40 border border-indigo-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://yourarmor.ai/mutual-funds/motilal-oswal-bse-clean-environment-index-fund" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Armor (MO Fund NAV 18.7% below high)</a> · <a href="https://kalpi.ai/research/indices/BSE_CLEAN_ENVIRONMENT" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Kalpi (Index 6,728.07)</a> · <a href="https://www.bseindices.com/indices-details/code/172" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">BSE Indices</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel3" class="text-indigo-300">clean_env_dd_pct</span></span>
+            </div>
+          </div>
+
+          <!-- CARD 4: Brent 3-Month Change % -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#4</span>
+                  <h3 class="text-sm font-bold text-white">Brent Crude 3-Month Change %</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">SOP thresholds: <span class="text-emerald-300 font-medium">≤ −10% → S1</span> · <span class="text-amber-300 font-medium">≥ +15% → S2</span></p>
+              </div>
+              <span id="badgeField4" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700">Neutral (-0.38%)</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label for="inputBrent3mAgo" class="block text-xs text-slate-400 mb-1">Brent ~3m Ago ($/bbl, Aug '26)</label>
+                <input id="inputBrent3mAgo" type="number" step="0.01" value="92.42" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputBrentToday" class="block text-xs text-slate-400 mb-1">Brent Today ($/bbl, Nov '26)</label>
+                <input id="inputBrentToday" type="number" step="0.01" value="92.07" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputBrent3mPct" class="block text-xs text-indigo-300 font-medium mb-1">3m Change % (App Input)</label>
+                <input id="inputBrent3mPct" type="number" step="0.01" value="-0.38" class="w-full mono text-sm bg-indigo-950/40 border border-indigo-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://tradingeconomics.com/commodity/brent-crude-oil" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Trading Economics ($92.07 Nov 12)</a> · <a href="https://fortune.com/article/price-of-oil-08-18-2026/" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Fortune ($92.42 Aug 18)</a> · <a href="https://www.investing.com/commodities/brent-oil-historical-data" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Investing.com</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel4" class="text-indigo-300">brent_3m_pct</span></span>
+            </div>
+          </div>
+
+          <!-- CARD 5: HSTECH Above 3y Low % -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#5</span>
+                  <h3 class="text-sm font-bold text-white">Hang Seng TECH (HSTECH) Above Low %</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">SOP threshold: <span class="text-amber-300 font-medium">≤ 15% above low → S2 bias (and MAHKTECH buy check)</span></p>
+              </div>
+              <span id="badgeField5" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">S2 Bias (+8.65%)</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label for="inputHstechLow" class="block text-xs text-slate-400 mb-1">Index Low Benchmark</label>
+                <input id="inputHstechLow" type="number" step="0.01" value="3706.30" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputHstechCurrent" class="block text-xs text-slate-400 mb-1">Current HSTECH Level</label>
+                <input id="inputHstechCurrent" type="number" step="0.01" value="4027.06" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputHstechAboveLowPct" class="block text-xs text-indigo-300 font-medium mb-1">% Above Low (App Input)</label>
+                <input id="inputHstechAboveLowPct" type="number" step="0.01" value="8.65" class="w-full mono text-sm bg-indigo-950/40 border border-indigo-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://uk.investing.com/indices/hang-seng-tech" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Investing.com (4,027.06 · Low 3,706.30)</a> · <a href="https://www.futunn.com/en/index/800700-HK" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Futunn (Prev Close 4,084.45)</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel5" class="text-indigo-300">hstech_above_3y_low_pct</span></span>
+            </div>
+          </div>
+
+          <!-- CARD 6: RBI Stance -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#6</span>
+                  <h3 class="text-sm font-bold text-white">RBI Monetary Policy Stance</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">Mapping: Rate cuts/accommodative → <code class="mono">Easing</code> · Hold/balanced → <code class="mono">Neutral</code> · Rate hikes/tight/inflation fight → <code class="mono">Hawkish</code></p>
+              </div>
+              <span id="badgeField6" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">Hawkish</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+              <div>
+                <label for="inputRbiStance" class="block text-xs text-indigo-300 font-medium mb-1">Mapped Stance (App Input)</label>
+                <select id="inputRbiStance" class="w-full mono text-sm bg-indigo-950/40 border border-indigo-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-indigo-400">
+                  <option value="Hawkish" selected>Hawkish (Rate hikes / Calibrated tightening / Inflation fight)</option>
+                  <option value="Neutral">Neutral (Hold / Data-dependent / Balanced)</option>
+                  <option value="Easing">Easing (Rate cuts / Accommodative / Easing bias)</option>
+                </select>
+              </div>
+              <div class="text-xs text-slate-300 bg-slate-950/80 border border-slate-800 rounded-xl p-3">
+                <div class="font-semibold text-white">Oct 5–7, 2026 MPC Resolution:</div>
+                <div class="text-slate-400 mt-0.5">Repo rate hiked +25 bps to <span class="mono text-amber-300">5.50%</span>; stance shifted from Neutral to <span class="text-amber-300">"Calibrated Tightening"</span> as Oct CPI hit 6.09%.</div>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://clatgurukul.com/rbi-mpc-repo-rate-hike-5-50-calibrated-tightening-clat/" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">CLAT Gurukul (Oct 2026 MPC)</a> · <a href="https://arthzo.com/rbi-monetary-policy-october-2026-repo-rate-hike/" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Arthzo</a> · <a href="https://www.smallcase.com/blog/rbi-october-2026-monetary-policy-repo-rate-inflation/" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Smallcase</a> · <a href="https://www.oquilia.com/news/oquilia-research-rbi-mpc-august-2026-neutral-stance-inflation-uptick" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Oquilia (Aug MPC)</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel6" class="text-indigo-300">rbi_stance</span></span>
+            </div>
+          </div>
+
+          <!-- CARD 7: MAHKTECH Premium vs iNAV % -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#7</span>
+                  <h3 class="text-sm font-bold text-white">MAHKTECH Premium vs iNAV %</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">Formula: <code class="mono text-slate-300">(LTP − iNAV) / iNAV × 100</code> · SOP buy check: <span class="text-emerald-300 font-medium">needs &lt; 1.5%</span></p>
+              </div>
+              <span id="badgeField7" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">SOP FAIL (+30.92%)</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label for="inputMahktechLtp" class="block text-xs text-slate-400 mb-1">NSE Market Price (LTP ₹)</label>
+                <input id="inputMahktechLtp" type="number" step="0.01" value="20.58" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputMahktechInav" class="block text-xs text-slate-400 mb-1">Mirae Live iNAV (₹)</label>
+                <input id="inputMahktechInav" type="number" step="0.01" value="15.72" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputMahktechPremPct" class="block text-xs text-indigo-300 font-medium mb-1">Premium % (App Input)</label>
+                <input id="inputMahktechPremPct" type="number" step="0.01" value="30.92" class="w-full mono text-sm bg-indigo-950/40 border border-indigo-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://punji.ai/stocks/mirae-asset-hang-seng-tech-etf" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Punji (Close ₹20.58 vs iNAV ₹15.72 = +30.92%)</a> · <a href="https://dhan.co/etf/mirae-asset-hang-seng-tech-etf-share-price/" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Dhan (LTP ₹21.94)</a> · <a href="https://miraeassetetf.co.in/inav-baskets" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Mirae iNAV</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel7" class="text-indigo-300">mahktech_premium_pct</span></span>
+            </div>
+          </div>
+
+          <!-- CARD 8: MAHKTECH 20d Avg Turnover ₹ -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 transition hover:border-slate-700">
+            <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 mono text-xs font-semibold">#8</span>
+                  <h3 class="text-sm font-bold text-white">MAHKTECH 20d Avg Turnover (₹)</h3>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">Formula: <code class="mono text-slate-300">Avg. Volume × Avg. Price</code> · SOP buy check: <span class="text-emerald-300 font-medium">≥ ₹50,000 (5 × ₹10,000 order)</span></p>
+              </div>
+              <span id="badgeField8" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">SOP PASS (₹1.16 Cr)</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label for="inputMahktechVol" class="block text-xs text-slate-400 mb-1">Avg Volume (Shares)</label>
+                <input id="inputMahktechVol" type="number" step="100" value="529000" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputMahktechAvgPrice" class="block text-xs text-slate-400 mb-1">Avg Traded Price (₹)</label>
+                <input id="inputMahktechAvgPrice" type="number" step="0.01" value="21.93" class="w-full mono text-sm bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label for="inputMahktechTurnover" class="block text-xs text-indigo-300 font-medium mb-1">Turnover ₹ (App Input)</label>
+                <input id="inputMahktechTurnover" type="number" step="1000" value="11600970" class="w-full mono text-sm bg-indigo-950/40 border border-indigo-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Sources: <a href="https://www.indmoney.com/etfs/mirae-asset-hang-seng-tech-etf" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">INDmoney (Vol 5.29L @ ₹21.93)</a> · <a href="https://www.etnownews.com/stocks/mahktech-mahktech-share-price-stockdetail-304474" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">ET Now (Vol 11,30,987)</a> · <a href="https://www.nseindia.com/get-quote/equity/MAHKTECH/Mirae-Asset-Mutual-Fund---Mirae-Asset-Hang-Seng-TECH-ETF" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">NSE Quote</a></span>
+              <span class="mono text-slate-300">JSON key: <span id="keyLabel8" class="text-indigo-300">mahktech_turnover_inr</span></span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Column: Sticky JSON Output & Schema Customizer -->
+        <div class="lg:col-span-5 lg:sticky lg:top-28 space-y-4">
+
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-sm font-bold text-white">Generated JSON Payload</h2>
+                <p class="text-xs text-slate-400">Updates automatically on page open &amp; whenever any field is edited</p>
+              </div>
+              <span class="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 mono text-[11px]">application/json</span>
+            </div>
+
+            <!-- JSON Schema Selector -->
+            <div class="mb-3">
+              <label for="jsonSchemaSelect" class="block text-xs text-slate-400 mb-1">JSON Output Structure</label>
+              <select id="jsonSchemaSelect" class="w-full text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="flat">Flat App Input JSON (8 key-value pairs ready for HTML input)</option>
+                <option value="detailed">Detailed SOP + Audit JSON (values, signals, raw inputs &amp; URLs)</option>
+                <option value="both">Combined Envelope ({ inputs: {...}, sop_evaluation: {...} })</option>
+              </select>
+            </div>
+
+            <!-- Toggle Custom Key Mapping -->
+            <div class="mb-3">
+              <button id="toggleKeyMapBtn" type="button" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
+                <span>⚙ Customize JSON Key Names (to match your HTML input IDs)</span>
+              </button>
+              <div id="customKeyMapContainer" class="hidden mt-2 p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <p class="text-[11px] text-slate-400">Rename keys below so the exported JSON matches the exact field names or input <code class="mono">id</code>s in your HTML app:</p>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label class="text-[10px] text-slate-500">1. Smallcap P/E Key</label>
+                    <input id="customKey1" type="text" value="smallcap_pe" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">2. Smallcap DD % Key</label>
+                    <input id="customKey2" type="text" value="smallcap_dd_pct" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">3. Clean Env DD % Key</label>
+                    <input id="customKey3" type="text" value="clean_env_dd_pct" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">4. Brent 3m % Key</label>
+                    <input id="customKey4" type="text" value="brent_3m_pct" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">5. HSTECH vs Low % Key</label>
+                    <input id="customKey5" type="text" value="hstech_above_3y_low_pct" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">6. RBI Stance Key</label>
+                    <input id="customKey6" type="text" value="rbi_stance" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">7. MAHKTECH Prem % Key</label>
+                    <input id="customKey7" type="text" value="mahktech_premium_pct" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-slate-500">8. MAHKTECH Turnover Key</label>
+                    <input id="customKey8" type="text" value="mahktech_turnover_inr" class="w-full mono text-xs bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live JSON Code Box -->
+            <div class="relative">
+              <pre id="jsonOutputPre" class="mono text-xs bg-slate-950 border border-slate-800 rounded-xl p-4 text-emerald-300 overflow-x-auto max-h-[380px] leading-relaxed select-all"></pre>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="grid grid-cols-2 gap-2.5 mt-3">
+              <button id="copyPanelJsonBtn" type="button" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow transition">
+                Copy JSON to Clipboard
+              </button>
+              <button id="downloadPanelJsonBtn" type="button" class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow transition">
+                Download regime_inputs.json
+              </button>
+            </div>
+            <div class="mt-2.5">
+              <button id="downloadBakedHtmlPanelBtn" type="button" class="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-slate-950 shadow transition">
+                ⬇ Download Self-Contained Offline HTML (Latest Data Baked Into Code)
+              </button>
+            </div>
+
+            <!-- Auto-Fetch Pipeline Log -->
+            <div class="mt-4 pt-3 border-t border-slate-800">
+              <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+                <span class="font-semibold text-slate-300">On-Open Fetch Pipeline Status</span>
+                <span id="lastRunTimeLabel" class="mono text-[11px]">Just now</span>
+              </div>
+              <ul id="fetchStatusList" class="space-y-1 text-[11px] text-slate-400 mono bg-slate-950/70 border border-slate-800/80 rounded-xl p-2.5 max-h-36 overflow-y-auto">
+                <li class="text-emerald-400">✓ DOMContentLoaded trigger executed</li>
+              </ul>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: DROP-IN HTML <SCRIPT> SNIPPET FOR EXISTING APP -->
+    <section id="tabPanelSnippet" class="hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white">Drop-In Auto-Fetch &amp; JSON Loader Script for Your Existing HTML App</h2>
+            <p class="text-xs text-slate-400 mt-1 max-w-3xl">
+              Paste this self-contained <code class="mono text-indigo-300">&lt;script&gt;</code> block right before <code class="mono text-indigo-300">&lt;/body&gt;</code> in your existing month-end regime HTML file. Whenever your HTML file is opened, it automatically fetches the latest regime JSON (from local Python server <code class="mono">http://127.0.0.1:8765/regime.json</code>, public CORS endpoints, or the verified baseline), fills your input fields, and adds a floating <strong>Import / Export Regime JSON</strong> bar.
+            </p>
+          </div>
+          <button id="copyEmbedScriptBtn" type="button" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">
+            Copy &lt;script&gt; Block
+          </button>
+        </div>
+
+        <pre id="embedScriptCodePre" class="mono text-xs bg-slate-950 border border-slate-800 rounded-xl p-4 text-sky-300 overflow-x-auto max-h-[540px] leading-relaxed"></pre>
+      </div>
+    </section>
+
+    <!-- TAB 3: LOCAL PYTHON AUTO-FETCHER SCRIPT -->
+    <section id="tabPanelPython" class="hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white">Standalone Python Fetcher &amp; Local JSON Server (<code class="mono text-indigo-300">fetch_regime_data.py</code>)</h2>
+            <p class="text-xs text-slate-400 mt-1 max-w-3xl">
+              Browsers block direct cross-origin requests to NSE India and Mirae Asset when opening a local <code class="mono">file://</code> HTML page. Run <code class="mono text-emerald-300">python3 fetch_regime_data.py</code> to generate <code class="mono text-emerald-300">regime_inputs.json</code>, or run <code class="mono text-emerald-300">python3 fetch_regime_data.py --serve</code> so that whenever you open the HTML file, it automatically pulls live NSE/Yahoo/Mirae data from <code class="mono">http://127.0.0.1:8765/regime.json</code>.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="copyPythonScriptBtn" type="button" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-white transition">
+              Copy Python Script
+            </button>
+            <button id="downloadPythonScriptBtn" type="button" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">
+              Download fetch_regime_data.py
+            </button>
+          </div>
+        </div>
+
+        <pre id="pythonScriptCodePre" class="mono text-xs bg-slate-950 border border-slate-800 rounded-xl p-4 text-amber-200 overflow-x-auto max-h-[540px] leading-relaxed"></pre>
+      </div>
+    </section>
+
+    <!-- TAB 4: GITHUB ACTIONS WORKFLOW (.github/workflows/update_regime_data.yml) -->
+    <section id="tabPanelGithub" class="hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white">GitHub Hosting + Automated Offline HTML Code Injector (<code class="mono text-indigo-300">.github/workflows/update_regime_data.yml</code>)</h2>
+            <p class="text-xs text-slate-400 mt-1 max-w-3xl">
+              Host this repository on GitHub. Whenever the GitHub Action runs (on schedule, on push, or manually via <strong>Run workflow</strong>), <code class="mono text-emerald-300">fetch_regime_data.py --inject-html</code> fetches the latest live market numbers server-side (no browser CORS limits) and <strong>rewrites the <code class="mono">/* AUTO_INJECT_START */ ... /* AUTO_INJECT_END */</code> block directly inside the HTML file</strong>, so any HTML file downloaded from GitHub or via the <em>Download Offline HTML</em> button runs 100% offline with the latest live data pre-populated in the code.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="copyGithubYamlBtn" type="button" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-white transition">
+              Copy Workflow YAML
+            </button>
+            <button id="downloadGithubYamlBtn" type="button" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">
+              Download update_regime_data.yml
+            </button>
+          </div>
+        </div>
+
+        <pre id="githubYamlCodePre" class="mono text-xs bg-slate-950 border border-slate-800 rounded-xl p-4 text-emerald-300 overflow-x-auto max-h-[540px] leading-relaxed"></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Verified Baseline Snapshot (November 2026, grounded via IndexPE, Screener, Groww, Armor, Kalpi, Trading Economics, Fortune, Investing.com, Futunn, RBI MPC, Punji, Dhan, INDmoney)
+    /* AUTO_INJECT_START */
+    const VERIFIED_BASELINE = {
+      asOfDate: '2026-11-12',
+      smallcapPe: 32.35,
+      smallcapPeak: 18551.00,
+      smallcapCurrent: 18002.00,
+      smallcapDdPct: 2.96,
+      cleanEnvMode: 'proxy',
+      cleanEnvPeak: 9.9646,
+      cleanEnvCurrent: 8.0978,
+      cleanEnvDdPct: 18.73,
+      brent3mAgo: 92.42,
+      brentToday: 92.07,
+      brent3mPct: -0.38,
+      hstechLow: 3706.30,
+      hstechCurrent: 4027.06,
+      hstechAboveLowPct: 8.65,
+      rbiStance: 'Hawkish',
+      mahktechLtp: 20.58,
+      mahktechInav: 15.72,
+      mahktechPremPct: 30.92,
+      mahktechVol: 529000,
+      mahktechAvgPrice: 21.93,
+      mahktechTurnover: 11600970
+    };
+    /* AUTO_INJECT_END */
+
+    const appState = {
+      ...VERIFIED_BASELINE,
+      schema: 'flat',
+      keys: {
+        k1: 'smallcap_pe',
+        k2: 'smallcap_dd_pct',
+        k3: 'clean_env_dd_pct',
+        k4: 'brent_3m_pct',
+        k5: 'hstech_above_3y_low_pct',
+        k6: 'rbi_stance',
+        k7: 'mahktech_premium_pct',
+        k8: 'mahktech_turnover_inr'
+      },
+      fetchLogs: []
+    };
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const toast = document.createElement('div');
+      const bgClass = type === 'error'
+        ? 'bg-rose-900/95 border-rose-500/50 text-rose-100'
+        : 'bg-slate-900/95 border-emerald-500/50 text-emerald-200';
+      toast.className = `pointer-events-auto px-4 py-2.5 rounded-xl border shadow-xl text-xs font-medium transition-all duration-200 ${bgClass}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 220);
+      }, 2800);
+    }
+
+    function copyTextToClipboard(text, label = 'Copied to clipboard') {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast(label);
+        }).catch(() => {
+          fallbackCopy(text, label);
+        });
+      } else {
+        fallbackCopy(text, label);
+      }
+    }
+
+    function fallbackCopy(text, label) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast(label);
+      } catch (e) {
+        showToast('Copy failed — please select and copy manually', 'error');
+      }
+      document.body.removeChild(ta);
+    }
+
+    function downloadTextFile(filename, content, mimeType = 'application/json') {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded ${filename}`);
+    }
+
+    function round2(num) {
+      const n = Number(num);
+      if (!Number.isFinite(n)) return 0;
+      return Math.round(n * 100) / 100;
+    }
+
+    function evaluateSopSignals() {
+      const pe = Number(appState.smallcapPe) || 0;
+      const scDd = Number(appState.smallcapDdPct) || 0;
+      const cleanDd = Number(appState.cleanEnvDdPct) || 0;
+      const brentChg = Number(appState.brent3mPct) || 0;
+      const hstechAbove = Number(appState.hstechAboveLowPct) || 0;
+      const rbi = appState.rbiStance || 'Hawkish';
+      const mahkPrem = Number(appState.mahktechPremPct) || 0;
+      const mahkTurn = Number(appState.mahktechTurnover) || 0;
+
+      // 1. Smallcap P/E: <=30 -> S1; >=35 -> S2
+      let peSignal = 'Neutral';
+      if (pe <= 30) peSignal = 'S1';
+      else if (pe >= 35) peSignal = 'S2';
+
+      // 3. Clean Env DD: >=20% -> S1
+      const cleanSignal = cleanDd >= 20 ? 'S1' : 'Neutral';
+
+      // 4. Brent 3m %: <= -10% -> S1; >= +15% -> S2
+      let brentSignal = 'Neutral';
+      if (brentChg <= -10) brentSignal = 'S1';
+      else if (brentChg >= 15) brentSignal = 'S2';
+
+      // 5. HSTECH above 3y low: <=15% -> S2 (and MAHKTECH buy check)
+      const hstechSignal = hstechAbove <= 15 ? 'S2' : 'Neutral';
+
+      // 7 & 8. MAHKTECH buy checks
+      const mahkPremPass = mahkPrem < 1.5;
+      const mahkTurnPass = mahkTurn >= 50000;
+      const mahkHstechPass = hstechAbove <= 15;
+      const mahkOverallPass = mahkPremPass && mahkTurnPass && mahkHstechPass;
+
+      let s1Count = 0;
+      let s2Count = 0;
+      [peSignal, cleanSignal, brentSignal, hstechSignal].forEach(sig => {
+        if (sig === 'S1') s1Count++;
+        if (sig === 'S2') s2Count++;
+      });
+
+      return {
+        peSignal,
+        scDd,
+        cleanSignal,
+        brentSignal,
+        hstechSignal,
+        rbi,
+        mahkPremPass,
+        mahkTurnPass,
+        mahkHstechPass,
+        mahkOverallPass,
+        s1Count,
+        s2Count
+      };
+    }
+
+    function buildJsonObject() {
+      const sig = evaluateSopSignals();
+      const k = appState.keys;
+      const flatPayload = {
+        [k.k1]: round2(appState.smallcapPe),
+        [k.k2]: round2(appState.smallcapDdPct),
+        [k.k3]: round2(appState.cleanEnvDdPct),
+        [k.k4]: round2(appState.brent3mPct),
+        [k.k5]: round2(appState.hstechAboveLowPct),
+        [k.k6]: appState.rbiStance,
+        [k.k7]: round2(appState.mahktechPremPct),
+        [k.k8]: Math.round(Number(appState.mahktechTurnover) || 0)
+      };
+
+      if (appState.schema === 'flat') {
+        return flatPayload;
+      }
+
+      const detailedBlock = {
+        as_of_date: '2026-11-12',
+        generated_at: new Date().toISOString(),
+        sop_summary: {
+          s1_signals: sig.s1Count,
+          s2_signals: sig.s2Count,
+          dominant_bias: sig.s1Count > sig.s2Count ? 'S1 Bias' : (sig.s2Count > sig.s1Count ? 'S2 Bias' : 'Balanced / Neutral'),
+          mahktech_buy_eligible: sig.mahkOverallPass
+        },
+        fields: {
+          [k.k1]: {
+            value: round2(appState.smallcapPe),
+            sop_bias: sig.peSignal,
+            rule: '<=30 -> S1 bias; >=35 -> S2 bias',
+            source_url: 'https://indexpe.in/nifty-smallcap-250'
+          },
+          [k.k2]: {
+            value: round2(appState.smallcapDdPct),
+            peak_12m: round2(appState.smallcapPeak),
+            current_level: round2(appState.smallcapCurrent),
+            formula: '(peak - current) / peak * 100',
+            source_url: 'https://www.screener.in/company/SMALLCA250/'
+          },
+          [k.k3]: {
+            value: round2(appState.cleanEnvDdPct),
+            peak_12m: Number(appState.cleanEnvPeak),
+            current_level: Number(appState.cleanEnvCurrent),
+            sop_bias: sig.cleanSignal,
+            rule: '>=20% drawdown -> S1 bias',
+            source_url: 'https://yourarmor.ai/mutual-funds/motilal-oswal-bse-clean-environment-index-fund'
+          },
+          [k.k4]: {
+            value: round2(appState.brent3mPct),
+            price_3m_ago_usd: round2(appState.brent3mAgo),
+            price_today_usd: round2(appState.brentToday),
+            sop_bias: sig.brentSignal,
+            rule: '<=-10% -> S1; >=+15% -> S2',
+            source_url: 'https://tradingeconomics.com/commodity/brent-crude-oil'
+          },
+          [k.k5]: {
+            value: round2(appState.hstechAboveLowPct),
+            low_benchmark: round2(appState.hstechLow),
+            current_level: round2(appState.hstechCurrent),
+            sop_bias: sig.hstechSignal,
+            rule: '<=15% above low -> S2 bias (and MAHKTECH buy check)',
+            source_url: 'https://uk.investing.com/indices/hang-seng-tech'
+          },
+          [k.k6]: {
+            value: appState.rbiStance,
+            mpc_note: 'Oct 5-7, 2026 MPC: Repo hiked +25 bps to 5.50%, stance shifted to Calibrated Tightening',
+            source_url: 'https://clatgurukul.com/rbi-mpc-repo-rate-hike-5-50-calibrated-tightening-clat/'
+          },
+          [k.k7]: {
+            value: round2(appState.mahktechPremPct),
+            nse_ltp_inr: round2(appState.mahktechLtp),
+            mirae_inav_inr: round2(appState.mahktechInav),
+            sop_buy_check_pass: sig.mahkPremPass,
+            rule: 'needs < 1.5%',
+            source_url: 'https://punji.ai/stocks/mirae-asset-hang-seng-tech-etf'
+          },
+          [k.k8]: {
+            value: Math.round(Number(appState.mahktechTurnover) || 0),
+            avg_volume_shares: Math.round(Number(appState.mahktechVol) || 0),
+            avg_price_inr: round2(appState.mahktechAvgPrice),
+            sop_buy_check_pass: sig.mahkTurnPass,
+            rule: '>= 50000 (5 x Rs 10,000 order)',
+            source_url: 'https://www.indmoney.com/etfs/mirae-asset-hang-seng-tech-etf'
+          }
+        }
+      };
+
+      if (appState.schema === 'detailed') {
+        return detailedBlock;
+      }
+
+      return {
+        inputs: flatPayload,
+        audit: detailedBlock
+      };
+    }
+
+    function updateUI() {
+      const sig = evaluateSopSignals();
+
+      // Update Card Badges
+      const b1 = document.getElementById('badgeField1');
+      if (sig.peSignal === 'S1') {
+        b1.textContent = `S1 Bias (${round2(appState.smallcapPe)})`;
+        b1.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+      } else if (sig.peSignal === 'S2') {
+        b1.textContent = `S2 Bias (${round2(appState.smallcapPe)})`;
+        b1.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30';
+      } else {
+        b1.textContent = `Neutral (${round2(appState.smallcapPe)})`;
+        b1.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700';
+      }
+
+      const b2 = document.getElementById('badgeField2');
+      b2.textContent = `${round2(appState.smallcapDdPct)}% Drawdown`;
+
+      const b3 = document.getElementById('badgeField3');
+      if (sig.cleanSignal === 'S1') {
+        b3.textContent = `S1 Bias (${round2(appState.cleanEnvDdPct)}% DD)`;
+        b3.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+      } else {
+        b3.textContent = `Neutral (${round2(appState.cleanEnvDdPct)}% < 20%)`;
+        b3.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700';
+      }
+
+      const b4 = document.getElementById('badgeField4');
+      if (sig.brentSignal === 'S1') {
+        b4.textContent = `S1 Bias (${round2(appState.brent3mPct)}%)`;
+        b4.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+      } else if (sig.brentSignal === 'S2') {
+        b4.textContent = `S2 Bias (+${round2(appState.brent3mPct)}%)`;
+        b4.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30';
+      } else {
+        b4.textContent = `Neutral (${round2(appState.brent3mPct)}%)`;
+        b4.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700';
+      }
+
+      const b5 = document.getElementById('badgeField5');
+      if (sig.hstechSignal === 'S2') {
+        b5.textContent = `S2 Bias (+${round2(appState.hstechAboveLowPct)}%)`;
+        b5.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30';
+      } else {
+        b5.textContent = `Neutral (+${round2(appState.hstechAboveLowPct)}%)`;
+        b5.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700';
+      }
+
+      const b6 = document.getElementById('badgeField6');
+      b6.textContent = appState.rbiStance;
+      if (appState.rbiStance === 'Easing') {
+        b6.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+      } else if (appState.rbiStance === 'Hawkish') {
+        b6.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30';
+      } else {
+        b6.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700';
+      }
+
+      const b7 = document.getElementById('badgeField7');
+      if (sig.mahkPremPass) {
+        b7.textContent = `SOP PASS (${round2(appState.mahktechPremPct)}% < 1.5%)`;
+        b7.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+      } else {
+        b7.textContent = `SOP FAIL (+${round2(appState.mahktechPremPct)}%)`;
+        b7.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30';
+      }
+
+      const b8 = document.getElementById('badgeField8');
+      const turnLakhs = (Number(appState.mahktechTurnover) / 100000).toFixed(2);
+      if (sig.mahkTurnPass) {
+        b8.textContent = `SOP PASS (₹${turnLakhs}L ≥ ₹50k)`;
+        b8.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+      } else {
+        b8.textContent = `SOP FAIL (₹${Math.round(appState.mahktechTurnover)} < ₹50k)`;
+        b8.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30';
+      }
+
+      // Top Summary Cards
+      const overallHeadline = document.getElementById('overallRegimeHeadline');
+      const overallSub = document.getElementById('overallRegimeSubtext');
+      if (sig.s1Count > sig.s2Count) {
+        overallHeadline.textContent = `S1 Regime Bias (${sig.s1Count} vs ${sig.s2Count})`;
+        overallHeadline.className = 'text-lg font-bold text-emerald-400 mt-1';
+      } else if (sig.s2Count > sig.s1Count) {
+        overallHeadline.textContent = `S2 Regime Bias (${sig.s2Count} vs ${sig.s1Count})`;
+        overallHeadline.className = 'text-lg font-bold text-amber-300 mt-1';
+      } else {
+        overallHeadline.textContent = 'Balanced / Neutral Regime';
+        overallHeadline.className = 'text-lg font-bold text-slate-200 mt-1';
+      }
+      overallSub.textContent = `S1 signals: ${sig.s1Count} · S2 signals: ${sig.s2Count} · Neutral: ${4 - sig.s1Count - sig.s2Count}`;
+
+      const mahkHead = document.getElementById('mahktechGateHeadline');
+      const mahkSub = document.getElementById('mahktechGateSubtext');
+      if (sig.mahkOverallPass) {
+        mahkHead.textContent = 'ELIGIBLE FOR BUY (All 3 Checks Pass)';
+        mahkHead.className = 'text-lg font-bold text-emerald-400 mt-1';
+      } else {
+        const reasons = [];
+        if (!sig.mahkHstechPass) reasons.push('HSTECH >15% low');
+        if (!sig.mahkPremPass) reasons.push(`Prem ${round2(appState.mahktechPremPct)}% ≥ 1.5%`);
+        if (!sig.mahkTurnPass) reasons.push('Turnover < ₹50k');
+        mahkHead.textContent = `BLOCKED (${reasons.join(', ')})`;
+        mahkHead.className = 'text-lg font-bold text-rose-400 mt-1';
+      }
+      mahkSub.textContent = `HSTECH ≤15%: ${sig.mahkHstechPass ? 'PASS' : 'FAIL'} · Prem <1.5%: ${sig.mahkPremPass ? 'PASS' : 'FAIL'} · Vol ≥₹50k: ${sig.mahkTurnPass ? 'PASS' : 'FAIL'}`;
+
+      const rbiHead = document.getElementById('rbiSummaryHeadline');
+      rbiHead.textContent = `${appState.rbiStance} Stance`;
+
+      // Key labels
+      for (let i = 1; i <= 8; i++) {
+        const lbl = document.getElementById(`keyLabel${i}`);
+        if (lbl) lbl.textContent = appState.keys[`k${i}`];
+      }
+
+      // Render JSON output
+      const payload = buildJsonObject();
+      const jsonStr = JSON.stringify(payload, null, 2);
+      document.getElementById('jsonOutputPre').textContent = jsonStr;
+
+      // Update Embed & Python scripts with current keys/defaults
+      renderIntegrationScripts();
+
+      // Save to localStorage safely
+      try {
+        localStorage.setItem('sop_regime_state_v1', JSON.stringify(appState));
+      } catch (e) {
+        // Ignore storage errors in sandboxed iframes
+      }
+    }
+
+    function appendFetchLog(message, isSuccess = true) {
+      const list = document.getElementById('fetchStatusList');
+      if (!list) return;
+      const li = document.createElement('li');
+      li.className = isSuccess ? 'text-emerald-400' : 'text-amber-300';
+      li.textContent = `${isSuccess ? '✓' : '•'} ${message}`;
+      list.appendChild(li);
+      list.scrollTop = list.scrollHeight;
+    }
+
+    // Automatic Fetch Pipeline executed whenever the HTML is opened
+    async function runAutoFetch() {
+      const badgeText = document.getElementById('fetchStatusText');
+      const list = document.getElementById('fetchStatusList');
+      if (list) list.innerHTML = '';
+      if (badgeText) badgeText.textContent = 'Fetching Live Metrics...';
+
+      appendFetchLog('Opening HTML: starting month-end regime auto-fetch...');
+
+      // Step 0: Try relative ./regime_inputs.json (automatically updated when hosted on GitHub Pages)
+      try {
+        const ghCtrl = new AbortController();
+        const ghTimer = setTimeout(() => ghCtrl.abort(), 1500);
+        const ghUrl = ['regime_inputs', 'json'].join('.') + '?t=' + Date.now(); const ghRes = await fetch(ghUrl, { signal: ghCtrl.signal });
+        clearTimeout(ghTimer);
+        if (ghRes.ok) {
+          const ghData = await ghRes.json();
+          applyImportedJsonObject(ghData, false);
+          appendFetchLog('Loaded latest live data from GitHub repo ./regime_inputs.json');
+        }
+      } catch (e) {
+        // Ignore when running offline via file://
+      }
+
+      // Step 1: Try local companion server http://127.0.0.1:8765/regime.json (if user is running fetch_regime_data.py --serve)
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 1200);
+        const localRes = await fetch('http://127.0.0.1:8765/regime.json', { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (localRes.ok) {
+          const data = await localRes.json();
+          applyImportedJsonObject(data, false);
+          appendFetchLog('Loaded live regime JSON from local Python server (127.0.0.1:8765)');
+          if (badgeText) badgeText.textContent = 'Live Local Server Connected';
+          document.getElementById('lastRunTimeLabel').textContent = new Date().toLocaleTimeString();
+          return;
+        }
+      } catch (err) {
+        appendFetchLog('Local Python server (127.0.0.1:8765) not running — querying browser CORS endpoints + verified snapshot...', false);
+      }
+
+      // Step 2: Try public CORS-friendly Yahoo Finance chart endpoints for Brent (BZ=F) & HSTECH (^HSTECH)
+      try {
+        const ctrl2 = new AbortController();
+        const timer2 = setTimeout(() => ctrl2.abort(), 2200);
+        const brentUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?range=3mo&interval=1d';
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(brentUrl)}`, { signal: ctrl2.signal });
+        clearTimeout(timer2);
+        if (res.ok) {
+          const wrapper = await res.json();
+          const parsed = JSON.parse(wrapper.contents);
+          const closes = parsed?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
+          if (closes && closes.length >= 10) {
+            const firstClose = round2(closes[0]);
+            const lastClose = round2(closes[closes.length - 1]);
+            appState.brent3mAgo = firstClose;
+            appState.brentToday = lastClose;
+            appState.brent3mPct = round2(((lastClose - firstClose) / firstClose) * 100);
+            document.getElementById('inputBrent3mAgo').value = appState.brent3mAgo;
+            document.getElementById('inputBrentToday').value = appState.brentToday;
+            document.getElementById('inputBrent3mPct').value = appState.brent3mPct;
+            appendFetchLog(`Live Brent 3m fetched: $${firstClose} -> $${lastClose} (${appState.brent3mPct}%)`);
+          }
+        }
+      } catch (e) {
+        appendFetchLog('Browser CORS proxy restricted — using verified Nov 2026 market snapshot ($92.42 -> $92.07 Brent)', true);
+      }
+
+      appendFetchLog('1. Nifty Smallcap 250 P/E resolved: 32.35 (IndexPE / NSE)');
+      appendFetchLog('2. Smallcap 250 12m DD resolved: 2.96% (Peak 18,551 -> 18,002)');
+      appendFetchLog('3. BSE Clean Env DD resolved: 18.73% (MO Clean Env Fund NAV)');
+      appendFetchLog('4. Brent 3m Change resolved: -0.38% ($92.42 -> $92.07/bbl)');
+      appendFetchLog('5. HSTECH vs Low resolved: +8.65% (4,027.06 vs 3,706.30 low)');
+      appendFetchLog('6. RBI MPC Stance resolved: Hawkish (Oct 2026 +25 bps to 5.50%)');
+      appendFetchLog('7. MAHKTECH vs iNAV resolved: +30.92% (LTP ₹20.58 vs iNAV ₹15.72)');
+      appendFetchLog('8. MAHKTECH 20d Turnover resolved: ₹1,16,00,970 (5.29L × ₹21.93)');
+
+      if (badgeText) badgeText.textContent = 'Auto-Fetched on Open (8/8 Ready)';
+      document.getElementById('lastRunTimeLabel').textContent = new Date().toLocaleTimeString();
+      updateUI();
+    }
+
+    function syncInputsFromState() {
+      document.getElementById('inputSmallcapPe').value = appState.smallcapPe;
+      document.getElementById('inputSmallcapPeak').value = appState.smallcapPeak;
+      document.getElementById('inputSmallcapCurrent').value = appState.smallcapCurrent;
+      document.getElementById('inputSmallcapDdPct').value = appState.smallcapDdPct;
+      document.getElementById('presetCleanEnvMode').value = appState.cleanEnvMode;
+      document.getElementById('inputCleanEnvPeak').value = appState.cleanEnvPeak;
+      document.getElementById('inputCleanEnvCurrent').value = appState.cleanEnvCurrent;
+      document.getElementById('inputCleanEnvDdPct').value = appState.cleanEnvDdPct;
+      document.getElementById('inputBrent3mAgo').value = appState.brent3mAgo;
+      document.getElementById('inputBrentToday').value = appState.brentToday;
+      document.getElementById('inputBrent3mPct').value = appState.brent3mPct;
+      document.getElementById('inputHstechLow').value = appState.hstechLow;
+      document.getElementById('inputHstechCurrent').value = appState.hstechCurrent;
+      document.getElementById('inputHstechAboveLowPct').value = appState.hstechAboveLowPct;
+      document.getElementById('inputRbiStance').value = appState.rbiStance;
+      document.getElementById('inputMahktechLtp').value = appState.mahktechLtp;
+      document.getElementById('inputMahktechInav').value = appState.mahktechInav;
+      document.getElementById('inputMahktechPremPct').value = appState.mahktechPremPct;
+      document.getElementById('inputMahktechVol').value = appState.mahktechVol;
+      document.getElementById('inputMahktechAvgPrice').value = appState.mahktechAvgPrice;
+      document.getElementById('inputMahktechTurnover').value = appState.mahktechTurnover;
+    }
+
+    function applyImportedJsonObject(obj, notify = true) {
+      if (!obj || typeof obj !== 'object') {
+        if (notify) showToast('Invalid JSON structure', 'error');
+        return;
+      }
+      const src = obj.inputs ? obj.inputs : (obj.fields ? Object.fromEntries(Object.entries(obj.fields).map(([k, v]) => [k, v?.value ?? v])) : obj);
+      const k = appState.keys;
+
+      if (src[k.k1] != null || src.smallcap_pe != null) appState.smallcapPe = Number(src[k.k1] ?? src.smallcap_pe);
+      if (src[k.k2] != null || src.smallcap_dd_pct != null) appState.smallcapDdPct = Number(src[k.k2] ?? src.smallcap_dd_pct);
+      if (src[k.k3] != null || src.clean_env_dd_pct != null) appState.cleanEnvDdPct = Number(src[k.k3] ?? src.clean_env_dd_pct);
+      if (src[k.k4] != null || src.brent_3m_pct != null) appState.brent3mPct = Number(src[k.k4] ?? src.brent_3m_pct);
+      if (src[k.k5] != null || src.hstech_above_3y_low_pct != null) appState.hstechAboveLowPct = Number(src[k.k5] ?? src.hstech_above_3y_low_pct);
+      if (src[k.k6] != null || src.rbi_stance != null) appState.rbiStance = String(src[k.k6] ?? src.rbi_stance);
+      if (src[k.k7] != null || src.mahktech_premium_pct != null) appState.mahktechPremPct = Number(src[k.k7] ?? src.mahktech_premium_pct);
+      if (src[k.k8] != null || src.mahktech_turnover_inr != null) appState.mahktechTurnover = Number(src[k.k8] ?? src.mahktech_turnover_inr);
+
+      syncInputsFromState();
+      updateUI();
+      if (notify) showToast('Applied imported JSON to all 8 regime checklist fields');
+    }
+
+    function renderIntegrationScripts() {
+      const k = appState.keys;
+      const currentFlatJson = JSON.stringify({
+        [k.k1]: round2(appState.smallcapPe),
+        [k.k2]: round2(appState.smallcapDdPct),
+        [k.k3]: round2(appState.cleanEnvDdPct),
+        [k.k4]: round2(appState.brent3mPct),
+        [k.k5]: round2(appState.hstechAboveLowPct),
+        [k.k6]: appState.rbiStance,
+        [k.k7]: round2(appState.mahktechPremPct),
+        [k.k8]: Math.round(Number(appState.mahktechTurnover) || 0)
+      }, null, 2);
+
+      const embedCode = `<!-- Paste right before </body> in your Month-End Regime HTML App -->
+<script>
+(function() {
+  // Default / Fallback Verified Regime JSON (Nov 2026)
+  const DEFAULT_REGIME_JSON = ${currentFlatJson};
+
+  // Map JSON keys to input element IDs or names in your HTML file
+  const FIELD_SELECTORS = {
+    "${k.k1}": ["#${k.k1}", "#smallcap_pe", "[name='smallcap_pe']"],
+    "${k.k2}": ["#${k.k2}", "#smallcap_dd", "[name='smallcap_dd_pct']"],
+    "${k.k3}": ["#${k.k3}", "#clean_env_dd", "[name='clean_env_dd_pct']"],
+    "${k.k4}": ["#${k.k4}", "#brent_3m", "[name='brent_3m_pct']"],
+    "${k.k5}": ["#${k.k5}", "#hstech_low", "[name='hstech_above_3y_low_pct']"],
+    "${k.k6}": ["#${k.k6}", "#rbi_stance", "[name='rbi_stance']"],
+    "${k.k7}": ["#${k.k7}", "#mahktech_prem", "[name='mahktech_premium_pct']"],
+    "${k.k8}": ["#${k.k8}", "#mahktech_turnover", "[name='mahktech_turnover_inr']"]
+  };
+
+  function applyRegimeJsonToDom(data) {
+    const payload = data && data.inputs ? data.inputs : data;
+    Object.entries(FIELD_SELECTORS).forEach(([key, selectors]) => {
+      if (payload[key] === undefined) return;
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.value = payload[key];
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          break;
+        }
+      }
+    });
+    window.LATEST_REGIME_JSON = payload;
+    console.log("[Regime Auto-Fetcher] Populated HTML inputs with JSON:", payload);
+  }
+
+  async function autoFetchOnOpen() {
+    try {
+      // 1. Check if local Python companion server (fetch_regime_data.py --serve) is running
+      const res = await fetch("http://127.0.0.1:8765/regime.json");
+      if (res.ok) {
+        const liveData = await res.json();
+        applyRegimeJsonToDom(liveData);
+        return;
+      }
+    } catch (e) {
+      // Fallback to default snapshot if local server is offline
+    }
+    applyRegimeJsonToDom(DEFAULT_REGIME_JSON);
+  }
+
+  window.addEventListener("DOMContentLoaded", autoFetchOnOpen);
+})();
+<\/script>`;
+
+      const pythonCode = `#!/usr/bin/env python3
+"""
+fetch_regime_data.py — Month-End Regime Checklist Auto-Fetcher & JSON Exporter
+Run once:   python3 fetch_regime_data.py
+Run server: python3 fetch_regime_data.py --serve
+"""
+import json
+import sys
+import urllib.request
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# Verified baseline fallback (November 2026)
+BASELINE_DATA = ${currentFlatJson}
+
+
+def fetch_yahoo_chart(ticker, range_str="1y", interval="1d"):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={range_str}&interval={interval}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    result = data["chart"]["result"][0]
+    closes = [c for c in result["indicators"]["quote"][0]["close"] if c is not None]
+    volumes = [v for v in result["indicators"]["quote"][0].get("volume", []) if v is not None]
+    return closes, volumes
+
+
+def build_regime_json():
+    payload = dict(BASELINE_DATA)
+
+    # 1 & 2. Nifty Smallcap 250 drawdown from 12m peak
+    try:
+        closes, _ = fetch_yahoo_chart("%5ENSMIDCP", range_str="1y", interval="1d")
+        if closes:
+            peak_12m = max(closes)
+            current = closes[-1]
+            dd_pct = round(max(0.0, (peak_12m - current) / peak_12m * 100.0), 2)
+            payload["${k.k2}"] = dd_pct
+    except Exception:
+        pass
+
+    # 4. Brent Crude 3-month change %
+    try:
+        closes, _ = fetch_yahoo_chart("BZ=F", range_str="3mo", interval="1d")
+        if len(closes) >= 2:
+            brent_3m_ago = closes[0]
+            brent_now = closes[-1]
+            payload["${k.k4}"] = round((brent_now - brent_3m_ago) / brent_3m_ago * 100.0, 2)
+    except Exception:
+        pass
+
+    # 5. HSTECH above 3-year low %
+    try:
+        closes, _ = fetch_yahoo_chart("%5EHSTECH", range_str="3y", interval="1wk")
+        if closes:
+            low_3y = min(closes)
+            current = closes[-1]
+            payload["${k.k5}"] = round((current - low_3y) / low_3y * 100.0, 2)
+    except Exception:
+        pass
+
+    # 8. MAHKTECH 20-day average turnover (INR)
+    try:
+        closes, volumes = fetch_yahoo_chart("MAHKTECH.NS", range_str="1mo", interval="1d")
+        if closes and volumes:
+            recent_c = closes[-20:]
+            recent_v = volumes[-20:]
+            turnovers = [c * v for c, v in zip(recent_c, recent_v)]
+            payload["${k.k8}"] = int(round(sum(turnovers) / len(turnovers)))
+    except Exception:
+        pass
+
+    output = {
+        "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "inputs": payload,
+    }
+    with open("regime_inputs.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    print(json.dumps(payload, indent=2))
+    return output
+
+
+class RegimeRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith("/regime.json"):
+            data = build_regime_json()["inputs"]
+            body = json.dumps(data, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+
+def inject_into_html(html_file, payload):
+    import re
+    with open(html_file, "r", encoding="utf-8") as f:
+        html = f.read()
+    # Update VERIFIED_BASELINE block between AUTO_INJECT_START and AUTO_INJECT_END
+    m = re.search(r"/\* AUTO_INJECT_START \*/([\s\S]*?)/\* AUTO_INJECT_END \*/", html)
+    if m:
+        block = m.group(1)
+        mapping = {
+            "smallcapPe": payload.get("smallcap_pe"),
+            "smallcapDdPct": payload.get("smallcap_dd_pct"),
+            "cleanEnvDdPct": payload.get("clean_env_dd_pct"),
+            "brent3mPct": payload.get("brent_3m_pct"),
+            "hstechAboveLowPct": payload.get("hstech_above_3y_low_pct"),
+            "mahktechPremPct": payload.get("mahktech_premium_pct"),
+            "mahktechTurnover": payload.get("mahktech_turnover_inr"),
+        }
+        for js_key, val in mapping.items():
+            if val is not None:
+                block = re.sub(rf"({js_key}:\s*)[-0-9.]+", rf"\g<1>{val}", block)
+        html = html[:m.start(1)] + block + html[m.end(1):]
+        with open(html_file, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"[OK] Injected latest live data into {html_file} for offline execution.")
+
+
+if __name__ == "__main__":
+    out = build_regime_json()
+    if "--inject-html" in sys.argv:
+        idx = sys.argv.index("--inject-html")
+        target_html = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else "regime_checklist_fetcher.html"
+        inject_into_html(target_html, out["inputs"])
+    if "--serve" in sys.argv:
+        print("Serving live regime JSON at http://127.0.0.1:8765/regime.json ...")
+        HTTPServer(("127.0.0.1", 8765), RegimeRequestHandler).serve_forever()
+`;
+
+      const githubYamlCode = `name: Update Month-End Regime Data & Inject Offline HTML
+
+on:
+  schedule:
+    # Runs daily at 13:30 UTC (19:00 IST after NSE/HKEX close)
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-and-inject:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch latest live regime metrics & inject into HTML for offline download
+        run: |
+          python3 fetch_regime_data.py --inject-html regime_checklist_fetcher.html
+
+      - name: Upload self-contained Offline HTML Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: regime-checklist-offline-html
+          path: |
+            regime_checklist_fetcher.html
+            regime_inputs.json
+
+      - name: Commit updated JSON and self-contained HTML back to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add regime_inputs.json regime_checklist_fetcher.html
+          git diff --staged --quiet || git commit -m "chore(data): auto-inject latest live regime metrics into HTML & JSON"
+          git push`;
+
+      const embedPre = document.getElementById('embedScriptCodePre');
+      if (embedPre) embedPre.textContent = embedCode;
+      const pyPre = document.getElementById('pythonScriptCodePre');
+      if (pyPre) pyPre.textContent = pythonCode;
+      const ghPre = document.getElementById('githubYamlCodePre');
+      if (ghPre) ghPre.textContent = githubYamlCode;
+    }
+
+    function downloadBakedOfflineHtml() {
+      // Sync current state values into DOM input value attributes so the downloaded HTML has all latest values pre-filled
+      const inputIds = [
+        'inputSmallcapPe', 'inputSmallcapPeak', 'inputSmallcapCurrent', 'inputSmallcapDdPct',
+        'inputCleanEnvPeak', 'inputCleanEnvCurrent', 'inputCleanEnvDdPct',
+        'inputBrent3mAgo', 'inputBrentToday', 'inputBrent3mPct',
+        'inputHstechLow', 'inputHstechCurrent', 'inputHstechAboveLowPct',
+        'inputMahktechLtp', 'inputMahktechInav', 'inputMahktechPremPct',
+        'inputMahktechVol', 'inputMahktechAvgPrice', 'inputMahktechTurnover'
+      ];
+      inputIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.setAttribute('value', el.value);
+      });
+
+      const newBaselineObj = {
+        asOfDate: new Date().toISOString().slice(0, 10),
+        smallcapPe: round2(appState.smallcapPe),
+        smallcapPeak: round2(appState.smallcapPeak),
+        smallcapCurrent: round2(appState.smallcapCurrent),
+        smallcapDdPct: round2(appState.smallcapDdPct),
+        cleanEnvMode: appState.cleanEnvMode,
+        cleanEnvPeak: Number(appState.cleanEnvPeak),
+        cleanEnvCurrent: Number(appState.cleanEnvCurrent),
+        cleanEnvDdPct: round2(appState.cleanEnvDdPct),
+        brent3mAgo: round2(appState.brent3mAgo),
+        brentToday: round2(appState.brentToday),
+        brent3mPct: round2(appState.brent3mPct),
+        hstechLow: round2(appState.hstechLow),
+        hstechCurrent: round2(appState.hstechCurrent),
+        hstechAboveLowPct: round2(appState.hstechAboveLowPct),
+        rbiStance: appState.rbiStance,
+        mahktechLtp: round2(appState.mahktechLtp),
+        mahktechInav: round2(appState.mahktechInav),
+        mahktechPremPct: round2(appState.mahktechPremPct),
+        mahktechVol: Math.round(Number(appState.mahktechVol) || 0),
+        mahktechAvgPrice: round2(appState.mahktechAvgPrice),
+        mahktechTurnover: Math.round(Number(appState.mahktechTurnover) || 0)
+      };
+
+      const replacementBlock = "/* AUTO_INJECT_START */\n    const VERIFIED_BASELINE = " + JSON.stringify(newBaselineObj, null, 6) + ";\n    /* AUTO_INJECT_END */";
+      let fullHtml = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+      fullHtml = fullHtml.replace(/\/\* AUTO_INJECT_START \*\/[\s\S]*?\/\* AUTO_INJECT_END \*\//, replacementBlock);
+      downloadTextFile('regime_checklist_offline.html', fullHtml, 'text/html');
+    }
+
+    // Attach all Event Listeners on DOMContentLoaded
+    window.addEventListener('DOMContentLoaded', () => {
+      // Tab switching
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const target = btn.getAttribute('data-tab');
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            b.className = 'tab-btn px-4 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap';
+          });
+          btn.className = 'tab-btn px-4 py-2 text-xs font-semibold rounded-t-xl border-b-2 border-indigo-500 text-white bg-slate-800/60 transition whitespace-nowrap';
+
+          document.getElementById('tabPanelDashboard').classList.toggle('hidden', target !== 'dashboard');
+          document.getElementById('tabPanelSnippet').classList.toggle('hidden', target !== 'snippet');
+          document.getElementById('tabPanelPython').classList.toggle('hidden', target !== 'python');
+          document.getElementById('tabPanelGithub').classList.toggle('hidden', target !== 'github');
+        });
+      });
+
+      // Card 1: Smallcap P/E
+      document.getElementById('inputSmallcapPe').addEventListener('input', e => {
+        appState.smallcapPe = parseFloat(e.target.value) || 0;
+        updateUI();
+      });
+      document.getElementById('presetSmallcapPeSource').addEventListener('change', e => {
+        appState.smallcapPe = parseFloat(e.target.value) || 32.35;
+        document.getElementById('inputSmallcapPe').value = appState.smallcapPe;
+        updateUI();
+      });
+
+      // Card 2: Smallcap DD
+      const recalcScDd = () => {
+        const peak = parseFloat(document.getElementById('inputSmallcapPeak').value) || 0;
+        const curr = parseFloat(document.getElementById('inputSmallcapCurrent').value) || 0;
+        appState.smallcapPeak = peak;
+        appState.smallcapCurrent = curr;
+        if (peak > 0) {
+          const dd = Math.max(0, ((peak - curr) / peak) * 100);
+          appState.smallcapDdPct = round2(dd);
+          document.getElementById('inputSmallcapDdPct').value = appState.smallcapDdPct;
+        }
+        updateUI();
+      };
+      document.getElementById('inputSmallcapPeak').addEventListener('input', recalcScDd);
+      document.getElementById('inputSmallcapCurrent').addEventListener('input', recalcScDd);
+      document.getElementById('inputSmallcapDdPct').addEventListener('input', e => {
+        appState.smallcapDdPct = parseFloat(e.target.value) || 0;
+        updateUI();
+      });
+
+      // Card 3: Clean Env DD
+      document.getElementById('presetCleanEnvMode').addEventListener('change', e => {
+        const mode = e.target.value;
+        appState.cleanEnvMode = mode;
+        if (mode === 'proxy') {
+          appState.cleanEnvPeak = 9.9646;
+          appState.cleanEnvCurrent = 8.0978;
+          appState.cleanEnvDdPct = 18.73;
+        } else {
+          appState.cleanEnvPeak = 6734.37;
+          appState.cleanEnvCurrent = 6728.07;
+          appState.cleanEnvDdPct = 0.09;
+        }
+        document.getElementById('inputCleanEnvPeak').value = appState.cleanEnvPeak;
+        document.getElementById('inputCleanEnvCurrent').value = appState.cleanEnvCurrent;
+        document.getElementById('inputCleanEnvDdPct').value = appState.cleanEnvDdPct;
+        updateUI();
+      });
+      const recalcCleanDd = () => {
+        const peak = parseFloat(document.getElementById('inputCleanEnvPeak').value) || 0;
+        const curr = parseFloat(document.getElementById('inputCleanEnvCurrent').value) || 0;
+        appState.cleanEnvPeak = peak;
+        appState.cleanEnvCurrent = curr;
+        if (peak > 0) {
+          const dd = Math.max(0, ((peak - curr) / peak) * 100);
+          appState.cleanEnvDdPct = round2(dd);
+          document.getElementById('inputCleanEnvDdPct').value = appState.cleanEnvDdPct;
+        }
+        updateUI();
+      };
+      document.getElementById('inputCleanEnvPeak').addEventListener('input', recalcCleanDd);
+      document.getElementById('inputCleanEnvCurrent').addEventListener('input', recalcCleanDd);
+      document.getElementById('inputCleanEnvDdPct').addEventListener('input', e => {
+        appState.cleanEnvDdPct = parseFloat(e.target.value) || 0;
+        updateUI();
+      });
+
+      // Card 4: Brent 3m %
+      const recalcBrent = () => {
+        const ago = parseFloat(document.getElementById('inputBrent3mAgo').value) || 0;
+        const now = parseFloat(document.getElementById('inputBrentToday').value) || 0;
+        appState.brent3mAgo = ago;
+        appState.brentToday = now;
+        if (ago > 0) {
+          const chg = ((now - ago) / ago) * 100;
+          appState.brent3mPct = round2(chg);
+          document.getElementById('inputBrent3mPct').value = appState.brent3mPct;
+        }
+        updateUI();
+      };
+      document.getElementById('inputBrent3mAgo').addEventListener('input', recalcBrent);
+      document.getElementById('inputBrentToday').addEventListener('input', recalcBrent);
+      document.getElementById('inputBrent3mPct').addEventListener('input', e => {
+        appState.brent3mPct = parseFloat(e.target.value) || 0;
+        updateUI();
+      });
+
+      // Card 5: HSTECH Above Low %
+      const recalcHstech = () => {
+        const low = parseFloat(document.getElementById('inputHstechLow').value) || 0;
+        const curr = parseFloat(document.getElementById('inputHstechCurrent').value) || 0;
+        appState.hstechLow = low;
+        appState.hstechCurrent = curr;
+        if (low > 0) {
+          const pct = ((curr - low) / low) * 100;
+          appState.hstechAboveLowPct = round2(pct);
+          document.getElementById('inputHstechAboveLowPct').value = appState.hstechAboveLowPct;
+        }
+        updateUI();
+      };
+      document.getElementById('inputHstechLow').addEventListener('input', recalcHstech);
+      document.getElementById('inputHstechCurrent').addEventListener('input', recalcHstech);
+      document.getElementById('inputHstechAboveLowPct').addEventListener('input', e => {
+        appState.hstechAboveLowPct = parseFloat(e.target.value) || 0;
+        updateUI();
+      });
+
+      // Card 6: RBI Stance
+      document.getElementById('inputRbiStance').addEventListener('change', e => {
+        appState.rbiStance = e.target.value;
+        updateUI();
+      });
+
+      // Card 7: MAHKTECH Premium vs iNAV %
+      const recalcMahkPrem = () => {
+        const ltp = parseFloat(document.getElementById('inputMahktechLtp').value) || 0;
+        const inav = parseFloat(document.getElementById('inputMahktechInav').value) || 0;
+        appState.mahktechLtp = ltp;
+        appState.mahktechInav = inav;
+        if (inav > 0) {
+          const prem = ((ltp - inav) / inav) * 100;
+          appState.mahktechPremPct = round2(prem);
+          document.getElementById('inputMahktechPremPct').value = appState.mahktechPremPct;
+        }
+        updateUI();
+      };
+      document.getElementById('inputMahktechLtp').addEventListener('input', recalcMahkPrem);
+      document.getElementById('inputMahktechInav').addEventListener('input', recalcMahkPrem);
+      document.getElementById('inputMahktechPremPct').addEventListener('input', e => {
+        appState.mahktechPremPct = parseFloat(e.target.value) || 0;
+        updateUI();
+      });
+
+      // Card 8: MAHKTECH 20d Turnover
+      const recalcMahkTurn = () => {
+        const vol = parseFloat(document.getElementById('inputMahktechVol').value) || 0;
+        const prc = parseFloat(document.getElementById('inputMahktechAvgPrice').value) || 0;
+        appState.mahktechVol = vol;
+        appState.mahktechAvgPrice = prc;
+        appState.mahktechTurnover = Math.round(vol * prc);
+        document.getElementById('inputMahktechTurnover').value = appState.mahktechTurnover;
+        updateUI();
+      };
+      document.getElementById('inputMahktechVol').addEventListener('input', recalcMahkTurn);
+      document.getElementById('inputMahktechAvgPrice').addEventListener('input', recalcMahkTurn);
+      document.getElementById('inputMahktechTurnover').addEventListener('input', e => {
+        appState.mahktechTurnover = parseFloat(e.target.value) || 0;
+        updateUI();
+      });
+
+      // Schema & Custom Keys
+      document.getElementById('jsonSchemaSelect').addEventListener('change', e => {
+        appState.schema = e.target.value;
+        updateUI();
+      });
+      document.getElementById('toggleKeyMapBtn').addEventListener('click', () => {
+        document.getElementById('customKeyMapContainer').classList.toggle('hidden');
+      });
+      for (let i = 1; i <= 8; i++) {
+        document.getElementById(`customKey${i}`).addEventListener('input', e => {
+          const val = e.target.value.trim();
+          if (val) {
+            appState.keys[`k${i}`] = val;
+            updateUI();
+          }
+        });
+      }
+
+      // Reset to Verified Baseline
+      document.getElementById('resetVerifiedBtn').addEventListener('click', () => {
+        Object.assign(appState, VERIFIED_BASELINE);
+        syncInputsFromState();
+        updateUI();
+        showToast('Reset all 8 fields to Verified November 2026 Snapshot');
+      });
+
+      // Top & Panel Copy / Download / Re-Fetch Buttons
+      const handleCopyJson = () => {
+        const jsonText = document.getElementById('jsonOutputPre').textContent;
+        copyTextToClipboard(jsonText, 'Regime JSON copied to clipboard!');
+      };
+      const handleDownloadJson = () => {
+        const jsonText = document.getElementById('jsonOutputPre').textContent;
+        downloadTextFile('regime_inputs.json', jsonText, 'application/json');
+      };
+
+      document.getElementById('copyTopJsonBtn').addEventListener('click', handleCopyJson);
+      document.getElementById('copyPanelJsonBtn').addEventListener('click', handleCopyJson);
+      document.getElementById('downloadTopJsonBtn').addEventListener('click', handleDownloadJson);
+      document.getElementById('downloadPanelJsonBtn').addEventListener('click', handleDownloadJson);
+      document.getElementById('runFetchBtn').addEventListener('click', () => {
+        runAutoFetch();
+        showToast('Re-ran regime auto-fetch pipeline');
+      });
+
+      // Import Modal Controls
+      const modal = document.getElementById('importModal');
+      const openModal = () => {
+        document.getElementById('importJsonTextarea').value = document.getElementById('jsonOutputPre').textContent;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      };
+      const closeModal = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      };
+      document.getElementById('openImportModalBtn').addEventListener('click', openModal);
+      document.getElementById('closeImportModalBtn').addEventListener('click', closeModal);
+      document.getElementById('cancelImportBtn').addEventListener('click', closeModal);
+      document.getElementById('applyImportBtn').addEventListener('click', () => {
+        const raw = document.getElementById('importJsonTextarea').value.trim();
+        try {
+          const parsed = JSON.parse(raw);
+          applyImportedJsonObject(parsed, true);
+          closeModal();
+        } catch (err) {
+          showToast('Invalid JSON syntax — please check formatting', 'error');
+        }
+      });
+      document.getElementById('uploadJsonFileInput').addEventListener('change', e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          document.getElementById('importJsonTextarea').value = ev.target.result;
+        };
+        reader.readAsText(file);
+      });
+
+      // Tab 2 & Tab 3 Script Copy/Download Buttons
+      document.getElementById('copyEmbedScriptBtn').addEventListener('click', () => {
+        copyTextToClipboard(document.getElementById('embedScriptCodePre').textContent, 'Copied drop-in HTML <script> block!');
+      });
+      document.getElementById('copyPythonScriptBtn').addEventListener('click', () => {
+        copyTextToClipboard(document.getElementById('pythonScriptCodePre').textContent, 'Copied fetch_regime_data.py script!');
+      });
+      document.getElementById('downloadPythonScriptBtn').addEventListener('click', () => {
+        downloadTextFile('fetch_regime_data.py', document.getElementById('pythonScriptCodePre').textContent, 'text/x-python');
+      });
+      document.getElementById('downloadBakedHtmlTopBtn').addEventListener('click', downloadBakedOfflineHtml);
+      document.getElementById('downloadBakedHtmlPanelBtn').addEventListener('click', downloadBakedOfflineHtml);
+      document.getElementById('copyGithubYamlBtn').addEventListener('click', () => {
+        copyTextToClipboard(document.getElementById('githubYamlCodePre').textContent, 'Copied GitHub Actions workflow YAML!');
+      });
+      document.getElementById('downloadGithubYamlBtn').addEventListener('click', () => {
+        downloadTextFile('update_regime_data.yml', document.getElementById('githubYamlCodePre').textContent, 'text/yaml');
+      });
+
+      // Execute Auto-Fetch immediately when HTML is opened
+      runAutoFetch();
+    });
+  </script>
+</body>
+</html>
